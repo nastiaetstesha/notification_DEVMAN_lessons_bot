@@ -1,17 +1,15 @@
-# import os
 import requests
 import time
 import logging
 
-# from telegram.ext import Updater, CommandHandler
 
 logger = logging.getLogger(__name__)
-
+API_TIMEOUT = 5
 
 def get_review_from_api(dvmn_token, params):
     url = "https://dvmn.org/api/long_polling/"
     headers = {"Authorization": f"Token {dvmn_token}"}
-    response = requests.get(url, headers=headers, params=params, timeout=90)
+    response = requests.get(url, headers=headers, params=params, timeout=API_TIMEOUT)
     response.raise_for_status()
     return response.json()
 
@@ -48,9 +46,15 @@ def listen_reviews(dvmn_token, bot, chat_id):
             handle_review(review, bot, chat_id, params)
 
         except requests.exceptions.ReadTimeout:
-            logger.warning(
-                "⚠️ ReadTimeout: Сервер не ответил вовремя. Повтор запроса..."
-                )
+            if API_TIMEOUT < 10:
+                logger.debug(
+                    "ReadTimeout (короткий таймаут) — повтор запроса"
+                    )
+            else:
+                logger.warning(
+                    "⚠️ ReadTimeout: Сервер не ответил вовремя. " \
+                    "Повтор запроса..."
+                    )
         except requests.exceptions.ConnectionError:
             logger.error("🔌 Ошибка подключения. Жду перед повтором...")
             time.sleep(30)
