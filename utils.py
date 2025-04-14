@@ -6,10 +6,16 @@ import logging
 logger = logging.getLogger(__name__)
 API_TIMEOUT = 5
 
+
 def get_review_from_api(dvmn_token, params):
     url = "https://dvmn.org/api/long_polling/"
     headers = {"Authorization": f"Token {dvmn_token}"}
-    response = requests.get(url, headers=headers, params=params, timeout=API_TIMEOUT)
+    response = requests.get(
+        url,
+        headers=headers,
+        params=params,
+        timeout=API_TIMEOUT
+        )
     response.raise_for_status()
     return response.json()
 
@@ -62,19 +68,3 @@ def listen_reviews(dvmn_token, bot, chat_id):
             logger.exception("💥 Непредвиденная ошибка:")
             time.sleep(30)
 
-
-def start(update, context):
-    user_first_name = update.message.from_user.first_name
-    update.message.reply_text(
-        f"👋 Привет, {user_first_name}! Я Devman Bot.\n\n"
-        "Я сообщу тебе, как только твоя работа будет проверена на dvmn.org.\n"
-        "Просто жди — я напишу, когда появятся новости 😉"
-    )
-
-
-def help_command(update, context):
-    update.message.reply_text(
-        "💡 Я отслеживаю проверки твоих домашних заданий с dvmn.org и сразу сообщаю в Telegram, "
-        "когда преподаватель проверит работу.\n\n"
-        "Просто оставь меня запущенным — и я всё сделаю за тебя!"
-    )
