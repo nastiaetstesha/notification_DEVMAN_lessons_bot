@@ -1,12 +1,62 @@
-from telegram.ext import Updater, CommandHandler
+# import os
+import requests
+import time
 import logging
-import os
-from dotenv import load_dotenv
 
-load_dotenv()
-logging.basicConfig(level=logging.INFO)
+# from telegram.ext import Updater, CommandHandler
+
 logger = logging.getLogger(__name__)
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+
+
+def get_review_from_api(dvmn_token, params):
+    url = "https://dvmn.org/api/long_polling/"
+    headers = {"Authorization": f"Token {dvmn_token}"}
+    response = requests.get(url, headers=headers, params=params, timeout=90)
+    response.raise_for_status()
+    return response.json()
+
+
+def handle_review(review, bot, chat_id, params):
+    if review["status"] == "timeout":
+        params["timestamp"] = review["timestamp_to_request"]
+        logger.info("⏳ Таймаут: новых проверок пока нет, жду дальше...")
+
+    elif review["status"] == "found":
+        params["timestamp"] = review["last_attempt_timestamp"]
+        for attempt in review["new_attempts"]:
+            lesson_title = attempt["lesson_title"]
+            is_negative = attempt["is_negative"]
+
+            message = (
+                f"📝 У вас проверили работу «{lesson_title}».\n"
+                f"{'❗️К сожалению, в работе нашлись ошибки.'
+                   if is_negative else
+                   '✅ Преподавателю всё понравилось, '
+                   'можно приступать к следующему уроку!'}"
+            )
+            bot.send_message(chat_id=chat_id, text=message)
+            logger.info(f"📨 Отправлено сообщение по уроку: {lesson_title}")
+
+
+def listen_reviews(dvmn_token, bot, chat_id):
+    logger.info("📡 Запущено слежение за проверками Devman...")
+    params = {}
+
+    while True:
+        try:
+            review = get_review_from_api(dvmn_token, params)
+            handle_review(review, bot, chat_id, params)
+
+        except requests.exceptions.ReadTimeout:
+            logger.warning(
+                "⚠️ ReadTimeout: Сервер не ответил вовремя. Повтор запроса..."
+                )
+        except requests.exceptions.ConnectionError:
+            logger.error("🔌 Ошибка подключения. Жду перед повтором...")
+            time.sleep(30)
+        except Exception:
+            logger.exception("💥 Непредвиденная ошибка:")
+            time.sleep(30)
 
 
 def start(update, context):
@@ -24,15 +74,3 @@ def help_command(update, context):
         "когда преподаватель проверит работу.\n\n"
         "Просто оставь меня запущенным — и я всё сделаю за тебя!"
     )
-
-
-def run_bot():
-    updater = Updater(TELEGRAM_BOT_TOKEN, use_context=True)
-    dp = updater.dispatcher
-
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("help", help_command))
-
-    updater.start_polling()
-    logger.info("Бот принимает команды Telegram")
-    updater.idle()
